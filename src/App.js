@@ -1,25 +1,21 @@
-import logo from './logo.svg';
-import './App.css';
+import React, { useState } from "react";
+import UserList from "./components/UserList";
+import AddUser from "./components/AddUser";
 
 function App() {
-  return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
-  );
+    const [refresh, setRefresh] = useState(false);
+
+    const refreshUsers = () => {
+        setRefresh(!refresh);
+    };
+
+    return (
+        <div className="App">
+            <h1>Laravel + React CRUD</h1>
+            <AddUser refreshUsers={refreshUsers} />
+            <UserList key={refresh} />
+        </div>
+    );
 }
 
 export default App;
