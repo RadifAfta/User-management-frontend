@@ -32,22 +32,29 @@ const login = async (email, password) => {
     // Kirim permintaan login
     const response = await axios.post(`${API_URL}/api/login`, { email, password });
 
-    if (response.data.token) {
-      // Simpan token dan informasi user
-      localStorage.setItem("user", JSON.stringify(response.data));
-      axios.defaults.headers.common["Authorization"] = `Bearer ${response.data.token}`;
-    } else if (response.data.status === "success" && !response.data.token) {
-      // Jika sukses tapi tidak ada token (mungkin skenario cookie-based Sanctum)
-      const user = { ...response.data, isAuthenticated: true };
-      localStorage.setItem("user", JSON.stringify(user));
+    // Pastikan respons berhasil
+    if (response.data.status === "success" || response.data.token) {
+      const userData = {
+        token: response.data.token,
+        user: response.data.user || {},
+        isAuthenticated: true
+      };
+      
+      // Simpan data user
+      localStorage.setItem("user", JSON.stringify(userData));
+      
+      // Set header authorization untuk request berikutnya
+      if (userData.token) {
+        axios.defaults.headers.common["Authorization"] = `Bearer ${userData.token}`;
+      }
     }
 
     return response.data;
   } catch (error) {
-    // Log error untuk debugging
+    // Pastikan error memiliki informasi lengkap untuk ditampilkan ke pengguna
     console.error("Login error details:", error);
     
-    // Lanjutkan error ke komponen untuk ditangani di sana
+    // Biarkan error asli untuk ditangani di komponen
     throw error;
   }
 };
@@ -58,7 +65,14 @@ const register = async (name, email, password) => {
     await getCsrfToken();
     
     // Kirim permintaan registrasi
-    return await axios.post(`${API_URL}/api/register`, { name, email, password });
+    const response = await axios.post(`${API_URL}/api/register`, { 
+      name, 
+      email, 
+      password,
+      password_confirmation: password // Laravel sering memerlukan ini
+    });
+
+    return response.data;
   } catch (error) {
     console.error("Registration error:", error);
     throw error;
@@ -67,14 +81,7 @@ const register = async (name, email, password) => {
 
 const logout = async () => {
   try {
-    // Jika menggunakan token-based auth
-    const user = getCurrentUser();
-    if (user && user.token) {
-      await axios.post(`${API_URL}/api/logout`);
-    } else {
-      // Jika menggunakan cookie-based auth (Sanctum default)
-      await axios.post(`${API_URL}/api/logout`);
-    }
+    await axios.post(`${API_URL}/api/logout`);
   } catch (error) {
     console.error("Logout error:", error);
   } finally {

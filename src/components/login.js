@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { login } from "../services/AuthService";
 import { FiMail, FiLock, FiLogIn } from "react-icons/fi";
 import { Link, useNavigate } from "react-router-dom";
@@ -9,6 +9,16 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
+
+  // Efek untuk menghilangkan pesan error setelah beberapa detik
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError("");
+      }, 5000); // Hilangkan pesan error setelah 5 detik
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -24,10 +34,18 @@ const Login = () => {
         )
       ]);
       
+      console.log("Login successful:", result);
+      
       // Jika login berhasil
       navigate("/dashboard");
     } catch (error) {
       console.error("Login error:", error);
+      
+      // Tampilkan pesan error di konsol untuk debugging
+      if (error.response) {
+        console.log("Response status:", error.response.status);
+        console.log("Response data:", error.response.data);
+      }
       
       // Penanganan error yang lebih spesifik dan detail
       if (error.response) {
@@ -35,39 +53,48 @@ const Login = () => {
         const status = error.response.status;
         const data = error.response.data;
         
-        if (status === 404) {
-          setError("Email tidak terdaftar. Silakan cek kembali atau daftar akun baru.");
-        } else if (status === 401 || status === 422) {
-          // Laravel sering menggunakan 422 untuk validasi error
-          if (data.message) {
-            setError(data.message);
-          } else if (data.error) {
-            setError(data.error);
+        // Tampilkan pesan error berdasarkan format respons dari API Laravel
+        if (data.message) {
+          setError(data.message);
+        } else if (data.error) {
+          setError(data.error);
+        } else if (data.errors) {
+          // Tangani format validasi error Laravel
+          if (typeof data.errors === 'object') {
+            const firstErrorField = Object.keys(data.errors)[0];
+            if (firstErrorField && data.errors[firstErrorField][0]) {
+              setError(data.errors[firstErrorField][0]);
+            } else {
+              setError("Validasi gagal. Periksa kembali data Anda.");
+            }
           } else {
-            setError("Password yang Anda masukkan salah. Coba lagi.");
+            setError(data.errors);
           }
-        } else if (status === 429) {
-          setError("Terlalu banyak percobaan login. Silakan coba lagi nanti.");
-        } else if (status >= 500) {
-          setError("Terjadi masalah pada server. Silakan coba lagi nanti.");
         } else {
-          setError("Login gagal. Silakan periksa kembali kredensial Anda.");
+          // Fallback pesan error berdasarkan status
+          if (status === 404) {
+            setError("Email tidak terdaftar. Silakan cek kembali atau daftar akun baruxxxxxx.");
+          } else if (status === 401) {
+            setError("Email atau password salah. Silakan coba lagi.");
+          } else if (status === 429) {
+            setError("Terlalu banyak percobaan login. Silakan coba lagi nanti.");
+          } else if (status >= 500) {
+            setError("Terjadi masalah pada server. Silakan coba lagi nanti.");
+          } else {
+            setError("Login gagal. Silakan periksa kembali kredensial Anda.");
+          }
         }
       } else if (error.request) {
         // Request dikirim tapi tidak ada respons dari server
         setError("Tidak dapat terhubung ke server. Periksa koneksi internet Anda.");
-      } else if (error.message.includes("Timeout")) {
+      } else if (error.message && error.message.includes("Timeout")) {
         setError("Server membutuhkan waktu terlalu lama untuk merespons. Coba lagi nanti.");
       } else {
         // Error lainnya
-        setError("Terjadi kesalahan saat proses login. Silakan coba lagi.");
+        setError(error.message || "Terjadi kesalahan saat proses login. Silakan coba lagi.");
       }
     } finally {
-      // Tambahkan delay sebelum loading dihentikan
-      // Ini memastikan pengguna melihat status loading cukup lama
-      setTimeout(() => {
-        setLoading(false);
-      }, 1000);
+      setLoading(false);
     }
   };
 
@@ -212,18 +239,5 @@ const Login = () => {
     </div>
   );
 };
-
-// Tambahkan CSS untuk animasi fade-in
-const style = document.createElement('style');
-style.textContent = `
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-  .animate-fade-in {
-    animation: fadeIn 0.5s ease-in-out;
-  }
-`;
-document.head.appendChild(style);
 
 export default Login;
