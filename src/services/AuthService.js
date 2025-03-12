@@ -3,13 +3,16 @@ import axios from "axios";
 const API_URL = "http://127.0.0.1:8000";
 
 // Konfigurasi default axios
-axios.defaults.withCredentials = true; // Pastikan cookie dikirim
-axios.defaults.timeout = 10000; // Timeout 10 detik
+axios.defaults.withCredentials = true;
+axios.defaults.timeout = 10000;
 
-// Interceptor untuk menangani error secara global
 axios.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response && error.response.status === 401 && isAuthenticated()) {
+      logout();
+      window.location.href = "/login";
+    }
     console.error("API Error:", error);
     return Promise.reject(error);
   }
@@ -34,11 +37,22 @@ const login = async (email, password) => {
 
     // Pastikan respons berhasil
     if (response.data.status === "success" || response.data.token) {
+      // Tambahkan pengecekan untuk mendapatkan role dari response
+      // (pastikan backend mengirimkan data role)
+      const role = response.data.user?.role || 'user'; // Default ke 'user' jika tidak ada
+      
       const userData = {
         token: response.data.token,
-        user: response.data.user || {},
+        user: {
+          ...response.data.user,
+          role: role // Tambahkan role ke dalam objek user
+        },
+        role: role, // Simpan juga di level atas untuk kompatibilitas
         isAuthenticated: true
       };
+      
+      // Log data untuk debugging
+      console.log("Saving user data with role:", userData);
       
       // Simpan data user
       localStorage.setItem("user", JSON.stringify(userData));
@@ -61,15 +75,13 @@ const login = async (email, password) => {
 
 const register = async (name, email, password) => {
   try {
-    // Mendapatkan token CSRF sebelum registrasi
     await getCsrfToken();
     
-    // Kirim permintaan registrasi
     const response = await axios.post(`${API_URL}/api/register`, { 
       name, 
       email, 
       password,
-      password_confirmation: password // Laravel sering memerlukan ini
+      password_confirmation: password
     });
 
     return response.data;
@@ -85,7 +97,6 @@ const logout = async () => {
   } catch (error) {
     console.error("Logout error:", error);
   } finally {
-    // Hapus data lokal terlepas dari hasil API call
     localStorage.removeItem("user");
     delete axios.defaults.headers.common["Authorization"];
   }
@@ -109,7 +120,37 @@ const isAuthenticated = () => {
   );
 };
 
-// Helper untuk memeriksa apakah token sudah kadaluarsa (jika ada expiry timestamp)
+// PERBAIKAN: Fungsi isAdmin yang menyesuaikan dengan struktur data dari backend
+const isAdmin = () => {
+  const userData = getCurrentUser();
+  
+  // Periksa apakah user.user memiliki properti role
+  if (userData?.user?.role === 'admin') {
+    return true;
+  }
+  
+  // Periksa apakah user memiliki properti role
+  if (userData?.role === 'admin') {
+    return true;
+  }
+  
+  // Jika tidak ada role atau bukan admin, kembalikan false
+  return false;
+};
+
+// Fungsi untuk debug - tambahkan ke export jika diperlukan
+const checkUserRole = () => {
+  const userData = getCurrentUser();
+  console.log("Full user data:", userData);
+  console.log("User role path 1:", userData?.role);
+  console.log("User role path 2:", userData?.user?.role);
+  
+  return {
+    hasRole: !!userData?.role || !!userData?.user?.role,
+    roleValue: userData?.role || userData?.user?.role || 'tidak ada'
+  };
+};
+
 const isTokenExpired = (user) => {
   if (user && user.expires_at) {
     const expiryTime = new Date(user.expires_at).getTime();
@@ -119,7 +160,6 @@ const isTokenExpired = (user) => {
   return false;
 };
 
-// Fungsi untuk refresh token (jika backend mendukung)
 const refreshToken = async () => {
   try {
     const response = await axios.post(`${API_URL}/api/refresh-token`);
@@ -132,7 +172,6 @@ const refreshToken = async () => {
     return response.data;
   } catch (error) {
     console.error("Token refresh failed:", error);
-    // Logout jika refresh token gagal
     await logout();
     throw new Error("Sesi Anda telah berakhir. Silakan login kembali.");
   }
@@ -144,5 +183,7 @@ export {
   logout, 
   getCurrentUser, 
   isAuthenticated,
+  isAdmin,
+  checkUserRole, // Tambahkan fungsi debug
   refreshToken
 };
